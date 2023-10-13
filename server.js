@@ -4,7 +4,11 @@ const { MongoClient } = require('mongodb');
 const cors = require("cors")
 const ObjectId = require('mongodb').ObjectId
 const cron = require('node-cron');
-
+const admin = require('firebase-admin');
+const serviceAccount = require('./serviceAccountKey.json');
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
 require('dotenv').config()
 
 const port = process.env.PORT || 5000;
@@ -20,10 +24,10 @@ const corsOptions = {
   credentials: true,
 }
 //remove cors for development
-app.use(cors(corsOptions))
-// app.use(cors({
-//   origin: 'http://localhost:5173',
-// }));
+// app.use(cors(corsOptions))
+app.use(cors({
+  origin: 'http://localhost:5173',
+}));
 app.use(express.json())
 
 
@@ -53,9 +57,20 @@ const run = async () => {
     // }
     // console.log(updateCount)
 
+
+    app.get('/allUsers', async (req, res) => {
+      admin.auth().listUsers()
+        .then((listUsersResult) => {
+          const users = listUsersResult.users.map(user => user.email)
+          res.send(users)
+        })
+        .catch((error) => {
+          res.send(error)
+        });
+    })
+
     //get all product from DB ** working
     app.get("/getProducts", async (req, res) => {
-
       const type = req.query?.type
       if (type === 'product') {
         const result = await collection.find({}).sort({ "company": 1 }).toArray()
@@ -305,9 +320,8 @@ const run = async () => {
         } else {
           return res.status(400).send('Invalid "type" value. Use "stockProduct" or "stock".');
         }
-        console.log(email)
         let query = {};
-        if (email !== 'rashed@rmc.com') {
+        if (email !== 'all') {
           query.user = email;
         }
     
