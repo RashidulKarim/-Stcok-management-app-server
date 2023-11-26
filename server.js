@@ -43,20 +43,7 @@ const run = async () => {
     const stockCollection = database.collection("stockProducts")
     const historyCollection = database.collection("history")
     const stockHistoryCollection = database.collection("stockHistory")
-    // const allStock = await stockCollection.find({}).toArray()
-    // //loop through all stock products and update the total price 
-    // let updateCount = 0;
-    // for(const pd of allStock){
-    //   const filter = { _id: ObjectId(pd._id) };
-    //   const options = { upsert: false };
-    //   const update = { $set: {totalPrice: pd.extraDiscountPrice * (pd.quantity + (pd.quantityHome || 0))} }
-    //   const result = await stockCollection.updateOne(filter, update, options);
-    //   if(result.modifiedCount > 0){
-    //     updateCount++
-    //   }
-    // }
-    // console.log(updateCount)
-
+    const productsDb = database.collection("productsDb");
 
     app.get('/allUsers', async (req, res) => {
       admin.auth().listUsers()
@@ -82,64 +69,6 @@ const run = async () => {
     })
 
     //add products to DB ** working
-    // app.post('/addProducts', async (req, res) => {
-    //   const products = req.body.productsCollection
-    //   const type = req.query?.type
-
-    //   let modifiedCount = 0;
-    //   let insertedCount = 0;
-
-    //   for (const pd of products) {
-    //     const filter = { _id: ObjectId(pd._id) };
-    //     const options = { upsert: true };
-    //     if (pd.hasOwnProperty('_id')) {
-    //       delete pd._id;
-    //     }
-    //     const update = { $set: pd }
-
-    //     let result;
-    //     if (type === 'product') {
-    //       result = await collection.updateOne(filter, update, options);
-    //       if (result.upsertedCount > 0) {
-    //         insertedCount++;
-    //         // const history = {
-    //         //   productId: result.upsertedId,
-    //         //   label: pd.label,
-    //         //   date: new Date().toISOString(),
-    //         //   user: req.query.user,
-    //         //   operation: 'insert',
-    //         //   rId: pd.rId,
-    //         //   productData: pd
-    //         // }       
-    //         // await historyCollection.insertOne(history)
-
-    //       } else if (result.modifiedCount > 0) {
-    //         modifiedCount++;
-    //       }
-    //     } else if (type === 'stock') {
-    //       result = await stockCollection.updateOne(filter, update, options);
-    //       if (result.upsertedCount > 0) {
-    //         insertedCount++;
-    //         // const history = {
-    //         //   productId: result.upsertedId,
-    //         //   label: pd.label,
-    //         //   date: new Date().toISOString(),
-    //         //   user: req.query.user,
-    //         //   operation: 'insert',
-    //         //   rId: pd.rId,
-    //         //   productData: pd
-    //         // }       
-    //         // await stockHistoryCollection.insertOne(history)
-
-    //       } else if (result.modifiedCount > 0) {
-    //         modifiedCount++;
-    //       }
-    //     }
-    //   }
-    //   res.send({ modifiedCount, insertedCount });
-    // })
-
-    //add products to DB ** working
     app.post('/addProducts', async (req, res) => {
       const products = req.body.productsCollection
       const type = req.query?.type
@@ -157,6 +86,16 @@ const run = async () => {
 
         let result;
         if (type === 'product') {
+          // first check product is in productsDb or not if not then add it to productsDb
+          const product = await productsDb.findOne({ name: pd.name.toLowerCase().trim() })
+          if (!product) {
+            await productsDb.insertOne({
+              name: pd.name.toLowerCase().trim(),
+              company: pd.company,
+              mrp: pd.mrp,
+              lpr: pd.lpr,
+             })
+          }
           result = await collection.updateOne(filter, update, options);
         } else if (type === 'stock') {
           result = await stockCollection.updateOne(filter, update, options);
@@ -171,52 +110,6 @@ const run = async () => {
       res.send({ modifiedCount, insertedCount });
     })
 
-    //delete many product ** working
-    // app.delete('/deleteProducts', async (req, res) => {
-    //   const query = req.body
-    //   const type = req.query?.type
-    //   const data = query.map(pd => {
-    //     return ObjectId(pd._id)
-    //   })
-    //   let result;
-    //   let deletedCount = 0;
-    //   if (type === 'product') {
-    //     for(const pd of query){
-    //       const history = {
-    //         productId: pd._id,
-    //         label: pd.label,
-    //         date: new Date().toISOString(),
-    //         user: req.query.user,
-    //         operation: 'delete',
-    //         rId: pd.rId,
-    //         productData: pd
-    //       }
-    //       result = await collection.findOneAndDelete({_id: ObjectId(pd._id)});
-    //       if(result.ok === 1){
-    //         deletedCount++;
-    //           await historyCollection.insertOne(history)
-    //       }
-    //     }
-    //   } else if (type === 'stock') {
-    //     for(const pd of query){
-    //       const history = {
-    //         productId: pd._id,
-    //         label: pd.label,
-    //         date: new Date().toISOString(),
-    //         user: req.query.user,
-    //         operation: 'delete',
-    //         rId: pd.rId,
-    //         productData: pd
-    //       }
-    //       result = await stockCollection.findOneAndDelete({_id: ObjectId(pd._id)});
-    //       if(result.ok === 1){
-    //         deletedCount++;
-    //         await stockHistoryCollection.insertOne(history)
-    //       }
-    //     }
-    //   }
-    //   res.send({ deletedCount })
-    // })
     //delete many product ** working
     app.delete('/deleteProducts', async (req, res) => {
       const query = req.body
