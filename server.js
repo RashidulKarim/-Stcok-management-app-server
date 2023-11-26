@@ -93,7 +93,7 @@ const run = async () => {
               name: pd.name.toLowerCase().trim(),
               company: pd.company,
               mrp: pd.mrp,
-              lpr: pd.lpr,
+              lpp: pd.lpp,
              })
           }
           result = await collection.updateOne(filter, update, options);
