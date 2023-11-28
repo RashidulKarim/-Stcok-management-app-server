@@ -60,12 +60,20 @@ const run = async () => {
     app.get("/getProducts", async (req, res) => {
       const type = req.query?.type
       if (type === 'product') {
-        const result = await collection.find({}).sort({ "company": 1 }).toArray()
-        res.send(result)
+        // await productsDb.updateMany({}, [{ $set: { label: "$name" } }]);
+        const shortProduct = await collection.find({}).sort({ "company": 1 }).toArray()
+        res.send(shortProduct)
       } else if (type === 'stock') {
         const result = await stockCollection.find({}).sort({ "company": 1 }).toArray()
         res.send(result)
       }
+    })
+
+    //get all dbProducts from DB ** working check if email props if not then return message or return all dbProducts
+    app.get("/getDbProducts", async (req, res) => {
+        const result = await productsDb.find({}).sort({ "company": 1 }).toArray();
+        res.send(result)
+     
     })
 
     //add products to DB ** working
@@ -82,26 +90,33 @@ const run = async () => {
         if (pd.hasOwnProperty('_id')) {
           delete pd._id;
         }
+    
         const update = { $set: pd }
 
         let result;
         if (type === 'product') {
-          // first check product is in productsDb or not if not then add it to productsDb
-          const product = await productsDb.findOne({ name: pd.name.toLowerCase().trim() })
-          if (!product) {
-            await productsDb.insertOne({
-              name: pd.name.toLowerCase().trim(),
-              company: pd.company,
-              mrp: pd.mrp,
-              lpp: pd.lpp,
-             })
+          const dbProductProperties = {
+            name: pd.name.toLowerCase().trim(),
+            label: pd.name.toLowerCase().trim(),
+            company: pd.company,
           }
-          result = await collection.updateOne(filter, update, options);
+          pd.mrp ? dbProductProperties.mrp = pd.mrp : null;
+          pd.lpp ? dbProductProperties.lpp = pd.lpp : null;
+          const data = await productsDb.updateOne({ name: pd.name.toLowerCase().trim() }, { $set: dbProductProperties }, { upsert: true });
+          if(pd.hasOwnProperty('dbId')) {
+            // set the dbId to _id for the productsDb
+            pd._id = ObjectId(pd.dbId);
+            delete pd.dbId;
+            result = await collection.insertOne(pd);
+          } else {
+            result = await collection.updateOne(filter, update, options);
+          }
         } else if (type === 'stock') {
           result = await stockCollection.updateOne(filter, update, options);
         }
-
-        if (result.upsertedCount > 0) {
+        if(result?.insertedId) {
+          insertedCount++;
+        } else if ((result.upsertedCount) > 0) {
           insertedCount++;
         } else if (result.modifiedCount > 0) {
           modifiedCount++;
@@ -109,6 +124,8 @@ const run = async () => {
       }
       res.send({ modifiedCount, insertedCount });
     })
+
+
 
     //delete many product ** working
     app.delete('/deleteProducts', async (req, res) => {
@@ -155,6 +172,9 @@ const run = async () => {
       let deletedCount = 0;
       if (type === 'product') {
         for (const pd of products) {
+          if(pd.hasOwnProperty('lpp')) {
+            await productsDb.updateOne({ _id: ObjectId(pd._id) }, { $set: { lpp: pd.lpp } });
+          }
           if (pd.quantity === 0) {
             const result = await collection.deleteOne({ _id: ObjectId(pd._id) })
             if (result.deletedCount === 1) {
