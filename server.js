@@ -95,14 +95,15 @@ const run = async () => {
 
         let result;
         if (type === 'product') {
-          const dbProductProperties = {
-            name: pd.name.toLowerCase().trim(),
-            label: pd.name.toLowerCase().trim(),
-            company: pd.company,
-          }
+          const dbProductProperties = {}
           pd.mrp ? dbProductProperties.mrp = pd.mrp : null;
           pd.lpp ? dbProductProperties.lpp = pd.lpp : null;
-          const data = await productsDb.updateOne({ name: pd.name.toLowerCase().trim() }, { $set: dbProductProperties }, { upsert: true });
+          pd.name ? dbProductProperties.name = pd.name.toLowerCase().trim() : null;
+          pd.name ? dbProductProperties.label = pd.name.toLowerCase().trim() : null;
+          pd.company ? dbProductProperties.company = pd.company : null;
+          if(Object.keys(dbProductProperties).length > 0) {
+            const data = await productsDb.updateOne({ name: pd.name.toLowerCase().trim() }, { $set: dbProductProperties }, { upsert: true });
+          }
           if(pd.hasOwnProperty('dbId')) {
             // set the dbId to _id for the productsDb
             pd._id = ObjectId(pd.dbId);
