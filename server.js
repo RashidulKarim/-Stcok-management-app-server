@@ -101,7 +101,8 @@ const run = async () => {
           pd.name ? dbProductProperties.name = pd.name.toLowerCase().trim() : null;
           pd.name ? dbProductProperties.label = pd.name.toLowerCase().trim() : null;
           pd.company ? dbProductProperties.company = pd.company : null;
-          if(Object.keys(dbProductProperties).length > 0) {
+          pd.market ? dbProductProperties.market = pd.market : null;
+          if(Object.keys(dbProductProperties).length > 1) {
             const data = await productsDb.updateOne({ name: pd.name.toLowerCase().trim() }, { $set: dbProductProperties }, { upsert: true });
           }
           if(pd.hasOwnProperty('dbId')) {
