@@ -174,8 +174,19 @@ const run = async () => {
       let deletedCount = 0;
       if (type === 'product') {
         for (const pd of products) {
-          if(pd.hasOwnProperty('lpp')) {
-            await productsDb.updateOne({ _id: ObjectId(pd._id) }, { $set: { lpp: pd.lpp } });
+          // if(pd.hasOwnProperty('lpp')) {
+          //   await productsDb.updateOne({ _id: ObjectId(pd._id) }, { $set: { lpp: pd.lpp } });
+          // }
+          if (pd.hasOwnProperty('lpp')) {
+            const objectIdMatch = await productsDb.findOne({ _id: ObjectId(pd._id) });
+            if (objectIdMatch) {
+              await productsDb.updateOne({ _id: ObjectId(pd._id) }, { $set: { lpp: pd.lpp } });
+            } else {
+              const product = await collection.findOne({ _id: ObjectId(pd._id) });
+              if(product) {
+                await productsDb.updateOne({ name: product.name }, { $set: { lpp: pd.lpp } });
+              }
+            }
           }
           if (pd.quantity === 0) {
             const result = await collection.deleteOne({ _id: ObjectId(pd._id) })
