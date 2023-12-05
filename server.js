@@ -179,12 +179,14 @@ const run = async () => {
           // }
           if (pd.hasOwnProperty('lpp')) {
             const objectIdMatch = await productsDb.findOne({ _id: ObjectId(pd._id) });
+            console.log("objectIdMatch",objectIdMatch)
             if (objectIdMatch) {
               await productsDb.updateOne({ _id: ObjectId(pd._id) }, { $set: { lpp: pd.lpp } });
             } else {
               const product = await collection.findOne({ _id: ObjectId(pd._id) });
+              console.log("product", product.name?.toLowerCase()?.trim())
               if(product) {
-                await productsDb.updateOne({ name: product.name }, { $set: { lpp: pd.lpp } });
+                await productsDb.updateOne({ name: product.name?.toLowerCase()?.trim() }, { $set: { lpp: pd.lpp } });
               }
             }
           }
