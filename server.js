@@ -56,9 +56,20 @@ const run = async () => {
         });
     })
 
+    app.get('/setDummyData', async (req, res) => {
+      await collection.deleteMany({ name: { $regex: /product/i }, company: 'whitehorse' });
+      const products = await productsDb.find({ name: { $regex: /product/i } }).toArray();
+      products.forEach(product => {
+        product.quantity = 1;
+      })
+      const result = await collection.insertMany(products);
+      res.send(result);
+    })
+
     //get all product from DB ** working
     app.get("/getProducts", async (req, res) => {
       const type = req.query?.type
+
       if (type === 'product') {
         // await productsDb.updateMany({}, [{ $set: { label: "$name" } }]);
         const shortProduct = await collection.find({}).sort({ "company": 1 }).toArray()
@@ -266,9 +277,25 @@ const run = async () => {
         res.status(500).send('Internal Server Error');
       }
     });
+
+    async function deleteOldRecords() {
+      try {
+        const tenDaysAgo = new Date();
+        tenDaysAgo.setDate(tenDaysAgo.getDate() - 5);
     
-
-
+        // Delete from history collection
+        const resultHistory = await client.db(process.env.DB_NAME).collection("history").deleteMany({ date: { $lt: tenDaysAgo.toISOString() } });
+        console.log(`Deleted ${resultHistory.deletedCount} old records from history collection.`);
+    
+        // Delete from stockHistory collection
+        const resultStockHistory = await client.db(process.env.DB_NAME).collection("stockHistory").deleteMany({ date: { $lt: tenDaysAgo.toISOString() } });
+        console.log(`Deleted ${resultStockHistory.deletedCount} old records from stockHistory collection.`);
+      } catch (error) {
+        console.error('Error while deleting old records:', error);
+      }
+    }
+    
+    cron.schedule('0 0 * * *', deleteOldRecords);    
 
   } catch (error) {
     console.log(error);
@@ -291,25 +318,6 @@ app.get('/', (req, res) => {
 cron.schedule('*/14 * * * *', async () => {
   console.log('running a task every 10 minutes');
 });
-
-async function deleteOldRecords() {
-  try {
-    const tenDaysAgo = new Date();
-    tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
-
-    // Delete from history collection
-    const resultHistory = await client.db(process.env.DB_NAME).collection("history").deleteMany({ date: { $lt: tenDaysAgo.toISOString() } });
-    console.log(`Deleted ${resultHistory.deletedCount} old records from history collection.`);
-
-    // Delete from stockHistory collection
-    const resultStockHistory = await client.db(process.env.DB_NAME).collection("stockHistory").deleteMany({ date: { $lt: tenDaysAgo.toISOString() } });
-    console.log(`Deleted ${resultStockHistory.deletedCount} old records from stockHistory collection.`);
-  } catch (error) {
-    console.error('Error while deleting old records:', error);
-  }
-}
-
-cron.schedule('0 0 * * *', deleteOldRecords);
 
 
 
