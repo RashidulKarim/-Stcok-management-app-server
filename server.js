@@ -107,20 +107,31 @@ const run = async () => {
         let result;
         if (type === 'product') {
           const dbProductProperties = {}
-          pd.mrp ? dbProductProperties.mrp = pd.mrp : null;
-          pd.lpp ? dbProductProperties.lpp = pd.lpp : null;
-          pd.name ? dbProductProperties.name = pd.name.toLowerCase().trim() : null;
-          pd.name ? dbProductProperties.label = pd.name.toLowerCase().trim() : null;
-          pd.company ? dbProductProperties.company = pd.company : null;
-          pd.market ? dbProductProperties.market = pd.market : null;
+          pd.mrp && (dbProductProperties.mrp = pd.mrp);
+          pd.lpp && (dbProductProperties.lpp = pd.lpp);
+          pd.name && (dbProductProperties.name = pd.name.toLowerCase().trim());
+          pd.label && (dbProductProperties.label = pd.label.toLowerCase().trim());
+          pd.company && (dbProductProperties.company = pd.company);
+          typeof pd.market === 'boolean' && (dbProductProperties.market = pd.market)
+          // pd.market ? dbProductProperties.market = pd.market : null;
           if(Object.keys(dbProductProperties).length > 1) {
             const data = await productsDb.updateOne({ name: pd.name.toLowerCase().trim() }, { $set: dbProductProperties }, { upsert: true });
           }
           if(pd.hasOwnProperty('dbId')) {
-            // set the dbId to _id for the productsDb
-            pd._id = ObjectId(pd.dbId);
-            delete pd.dbId;
+          // set the dbId to _id for the productsDb
+          pd._id = ObjectId(pd.dbId);
+          delete pd.dbId;
+
+          // Check if a document with the same _id already exists
+          const existingDoc = await collection.findOne({ _id: pd._id });
+
+          if (existingDoc) {
+            // If the document exists, update it
+            result = await collection.updateOne({ _id: pd._id }, { $set: pd });
+          } else {
+            // If the document does not exist, insert a new one
             result = await collection.insertOne(pd);
+            }
           } else {
             result = await collection.updateOne(filter, update, options);
           }
