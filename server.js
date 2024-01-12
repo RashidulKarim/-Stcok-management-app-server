@@ -4,7 +4,11 @@ const { MongoClient } = require('mongodb');
 const cors = require("cors")
 const ObjectId = require('mongodb').ObjectId
 const cron = require('node-cron');
-
+const admin = require('firebase-admin');
+const serviceAccount = require('./serviceAccountKey.json');
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
 require('dotenv').config()
 
 const port = process.env.PORT || 5000;
@@ -20,10 +24,10 @@ const corsOptions = {
   credentials: true,
 }
 //remove cors for development
-app.use(cors(corsOptions))
-// app.use(cors({
-//   origin: 'http://localhost:5173',
-// }));
+// app.use(cors(corsOptions))
+app.use(cors({
+  origin: 'http://localhost:5173',
+}));
 app.use(express.json())
 
 
@@ -39,90 +43,49 @@ const run = async () => {
     const stockCollection = database.collection("stockProducts")
     const historyCollection = database.collection("history")
     const stockHistoryCollection = database.collection("stockHistory")
-    // const allStock = await stockCollection.find({}).toArray()
-    // //loop through all stock products and update the total price 
-    // let updateCount = 0;
-    // for(const pd of allStock){
-    //   const filter = { _id: ObjectId(pd._id) };
-    //   const options = { upsert: false };
-    //   const update = { $set: {totalPrice: pd.extraDiscountPrice * (pd.quantity + (pd.quantityHome || 0))} }
-    //   const result = await stockCollection.updateOne(filter, update, options);
-    //   if(result.modifiedCount > 0){
-    //     updateCount++
-    //   }
-    // }
-    // console.log(updateCount)
+    const productsDb = database.collection("productsDb");
+
+    app.get('/allUsers', async (req, res) => {
+      admin.auth().listUsers()
+        .then((listUsersResult) => {
+          const users = listUsersResult.users.map(user => user.email)
+          res.send(users)
+        })
+        .catch((error) => {
+          res.send(error)
+        });
+    })
+
+    app.get('/setDummyData', async (req, res) => {
+      await collection.deleteMany({ name: { $regex: /product/i }, company: 'whitehorse' });
+      const products = await productsDb.find({ name: { $regex: /product/i } }).toArray();
+      products.forEach(product => {
+        product.quantity = 1;
+      })
+      const result = await collection.insertMany(products);
+      res.send(result);
+    })
 
     //get all product from DB ** working
     app.get("/getProducts", async (req, res) => {
-
       const type = req.query?.type
+
       if (type === 'product') {
-        const result = await collection.find({}).sort({ "company": 1 }).toArray()
-        res.send(result)
+        // await productsDb.updateMany({}, [{ $set: { label: "$name" } }]);
+        const shortProduct = await collection.find({}).sort({ "company": 1 }).toArray()
+        res.send(shortProduct)
       } else if (type === 'stock') {
         const result = await stockCollection.find({}).sort({ "company": 1 }).toArray()
         res.send(result)
       }
     })
 
-    //add products to DB ** working
-    // app.post('/addProducts', async (req, res) => {
-    //   const products = req.body.productsCollection
-    //   const type = req.query?.type
-
-    //   let modifiedCount = 0;
-    //   let insertedCount = 0;
-
-    //   for (const pd of products) {
-    //     const filter = { _id: ObjectId(pd._id) };
-    //     const options = { upsert: true };
-    //     if (pd.hasOwnProperty('_id')) {
-    //       delete pd._id;
-    //     }
-    //     const update = { $set: pd }
-
-    //     let result;
-    //     if (type === 'product') {
-    //       result = await collection.updateOne(filter, update, options);
-    //       if (result.upsertedCount > 0) {
-    //         insertedCount++;
-    //         // const history = {
-    //         //   productId: result.upsertedId,
-    //         //   label: pd.label,
-    //         //   date: new Date().toISOString(),
-    //         //   user: req.query.user,
-    //         //   operation: 'insert',
-    //         //   rId: pd.rId,
-    //         //   productData: pd
-    //         // }       
-    //         // await historyCollection.insertOne(history)
-
-    //       } else if (result.modifiedCount > 0) {
-    //         modifiedCount++;
-    //       }
-    //     } else if (type === 'stock') {
-    //       result = await stockCollection.updateOne(filter, update, options);
-    //       if (result.upsertedCount > 0) {
-    //         insertedCount++;
-    //         // const history = {
-    //         //   productId: result.upsertedId,
-    //         //   label: pd.label,
-    //         //   date: new Date().toISOString(),
-    //         //   user: req.query.user,
-    //         //   operation: 'insert',
-    //         //   rId: pd.rId,
-    //         //   productData: pd
-    //         // }       
-    //         // await stockHistoryCollection.insertOne(history)
-
-    //       } else if (result.modifiedCount > 0) {
-    //         modifiedCount++;
-    //       }
-    //     }
-    //   }
-    //   res.send({ modifiedCount, insertedCount });
-    // })
+    //get all dbProducts from DB ** working check if email props if not then return message or return all dbProducts
+    app.get("/getDbProducts", async (req, res) => {
+        const result = await productsDb.find({}).sort({ "company": 1 }).toArray();
+        res.send(result)
+     
+    })
 
     //add products to DB ** working
     app.post('/addProducts', async (req, res) => {
@@ -138,16 +101,46 @@ const run = async () => {
         if (pd.hasOwnProperty('_id')) {
           delete pd._id;
         }
+    
         const update = { $set: pd }
 
         let result;
         if (type === 'product') {
-          result = await collection.updateOne(filter, update, options);
+          const dbProductProperties = {}
+          pd.mrp && (dbProductProperties.mrp = pd.mrp);
+          pd.lpp && (dbProductProperties.lpp = pd.lpp);
+          pd.name && (dbProductProperties.name = pd.name.toLowerCase().trim());
+          pd.label && (dbProductProperties.label = pd.label.toLowerCase().trim());
+          pd.company && (dbProductProperties.company = pd.company);
+          typeof pd.market === 'boolean' && (dbProductProperties.market = pd.market)
+          // pd.market ? dbProductProperties.market = pd.market : null;
+          if(Object.keys(dbProductProperties).length > 1) {
+            const data = await productsDb.updateOne({ name: pd.name.toLowerCase().trim() }, { $set: dbProductProperties }, { upsert: true });
+          }
+          if(pd.hasOwnProperty('dbId')) {
+          // set the dbId to _id for the productsDb
+          pd._id = ObjectId(pd.dbId);
+          delete pd.dbId;
+
+          // Check if a document with the same _id already exists
+          const existingDoc = await collection.findOne({ _id: pd._id });
+
+          if (existingDoc) {
+            // If the document exists, update it
+            result = await collection.updateOne({ _id: pd._id }, { $set: pd });
+          } else {
+            // If the document does not exist, insert a new one
+            result = await collection.insertOne(pd);
+            }
+          } else {
+            result = await collection.updateOne(filter, update, options);
+          }
         } else if (type === 'stock') {
           result = await stockCollection.updateOne(filter, update, options);
         }
-
-        if (result.upsertedCount > 0) {
+        if(result?.insertedId) {
+          insertedCount++;
+        } else if ((result.upsertedCount) > 0) {
           insertedCount++;
         } else if (result.modifiedCount > 0) {
           modifiedCount++;
@@ -156,52 +149,8 @@ const run = async () => {
       res.send({ modifiedCount, insertedCount });
     })
 
-    //delete many product ** working
-    // app.delete('/deleteProducts', async (req, res) => {
-    //   const query = req.body
-    //   const type = req.query?.type
-    //   const data = query.map(pd => {
-    //     return ObjectId(pd._id)
-    //   })
-    //   let result;
-    //   let deletedCount = 0;
-    //   if (type === 'product') {
-    //     for(const pd of query){
-    //       const history = {
-    //         productId: pd._id,
-    //         label: pd.label,
-    //         date: new Date().toISOString(),
-    //         user: req.query.user,
-    //         operation: 'delete',
-    //         rId: pd.rId,
-    //         productData: pd
-    //       }
-    //       result = await collection.findOneAndDelete({_id: ObjectId(pd._id)});
-    //       if(result.ok === 1){
-    //         deletedCount++;
-    //           await historyCollection.insertOne(history)
-    //       }
-    //     }
-    //   } else if (type === 'stock') {
-    //     for(const pd of query){
-    //       const history = {
-    //         productId: pd._id,
-    //         label: pd.label,
-    //         date: new Date().toISOString(),
-    //         user: req.query.user,
-    //         operation: 'delete',
-    //         rId: pd.rId,
-    //         productData: pd
-    //       }
-    //       result = await stockCollection.findOneAndDelete({_id: ObjectId(pd._id)});
-    //       if(result.ok === 1){
-    //         deletedCount++;
-    //         await stockHistoryCollection.insertOne(history)
-    //       }
-    //     }
-    //   }
-    //   res.send({ deletedCount })
-    // })
+
+
     //delete many product ** working
     app.delete('/deleteProducts', async (req, res) => {
       const query = req.body
@@ -247,6 +196,22 @@ const run = async () => {
       let deletedCount = 0;
       if (type === 'product') {
         for (const pd of products) {
+          // if(pd.hasOwnProperty('lpp')) {
+          //   await productsDb.updateOne({ _id: ObjectId(pd._id) }, { $set: { lpp: pd.lpp } });
+          // }
+          if (pd.hasOwnProperty('lpp')) {
+            const objectIdMatch = await productsDb.findOne({ _id: ObjectId(pd._id) });
+            console.log("objectIdMatch",objectIdMatch)
+            if (objectIdMatch) {
+              await productsDb.updateOne({ _id: ObjectId(pd._id) }, { $set: { lpp: pd.lpp } });
+            } else {
+              const product = await collection.findOne({ _id: ObjectId(pd._id) });
+              console.log("product", product.name?.toLowerCase()?.trim())
+              if(product) {
+                await productsDb.updateOne({ name: product.name?.toLowerCase()?.trim() }, { $set: { lpp: pd.lpp } });
+              }
+            }
+          }
           if (pd.quantity === 0) {
             const result = await collection.deleteOne({ _id: ObjectId(pd._id) })
             if (result.deletedCount === 1) {
@@ -305,9 +270,8 @@ const run = async () => {
         } else {
           return res.status(400).send('Invalid "type" value. Use "stockProduct" or "stock".');
         }
-        console.log(email)
         let query = {};
-        if (email !== 'rashed@rmc.com') {
+        if (email !== 'all') {
           query.user = email;
         }
     
@@ -324,9 +288,25 @@ const run = async () => {
         res.status(500).send('Internal Server Error');
       }
     });
+
+    async function deleteOldRecords() {
+      try {
+        const tenDaysAgo = new Date();
+        tenDaysAgo.setDate(tenDaysAgo.getDate() - 5);
     
-
-
+        // Delete from history collection
+        const resultHistory = await client.db(process.env.DB_NAME).collection("history").deleteMany({ date: { $lt: tenDaysAgo.toISOString() } });
+        console.log(`Deleted ${resultHistory.deletedCount} old records from history collection.`);
+    
+        // Delete from stockHistory collection
+        const resultStockHistory = await client.db(process.env.DB_NAME).collection("stockHistory").deleteMany({ date: { $lt: tenDaysAgo.toISOString() } });
+        console.log(`Deleted ${resultStockHistory.deletedCount} old records from stockHistory collection.`);
+      } catch (error) {
+        console.error('Error while deleting old records:', error);
+      }
+    }
+    
+    cron.schedule('0 0 * * *', deleteOldRecords);    
 
   } catch (error) {
     console.log(error);
@@ -349,25 +329,6 @@ app.get('/', (req, res) => {
 cron.schedule('*/14 * * * *', async () => {
   console.log('running a task every 10 minutes');
 });
-
-async function deleteOldRecords() {
-  try {
-    const tenDaysAgo = new Date();
-    tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
-
-    // Delete from history collection
-    const resultHistory = await client.db(process.env.DB_NAME).collection("history").deleteMany({ date: { $lt: tenDaysAgo.toISOString() } });
-    console.log(`Deleted ${resultHistory.deletedCount} old records from history collection.`);
-
-    // Delete from stockHistory collection
-    const resultStockHistory = await client.db(process.env.DB_NAME).collection("stockHistory").deleteMany({ date: { $lt: tenDaysAgo.toISOString() } });
-    console.log(`Deleted ${resultStockHistory.deletedCount} old records from stockHistory collection.`);
-  } catch (error) {
-    console.error('Error while deleting old records:', error);
-  }
-}
-
-cron.schedule('0 0 * * *', deleteOldRecords);
 
 
 
